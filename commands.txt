@@ -1,0 +1,3 @@
+ns-train nerfacto --data data/nerfstudio/fangzhou-small
+ns-train tensorf --data data/nerfstudio/fangzhou-small
+ns-train in2n --data data/nerfstudio/fangzhou-small/ --load-dir outputs/fangzhou-small/nerfacto/2023-11-04_160215/nerfstudio_models --pipeline.prompt {"give him a mustache"} --pipeline.guidance-scale 7.5 --pipeline.image-guidance-scale 1.5
