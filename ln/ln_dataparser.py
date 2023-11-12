@@ -53,8 +53,6 @@ class LatentNerfDataParserConfig(NerfstudioDataParserConfig):
     """Nerfstudio dataset config"""
 
     _target: Type = field(default_factory=lambda: LatentNerfDataParser)
-    latent_scale: float = 0.125
-    """Latent scale factor."""
 
 @dataclass
 class LatentNerfDataParser(DataParser):
@@ -63,78 +61,8 @@ class LatentNerfDataParser(DataParser):
     config: LatentNerfDataParserConfig
     downscale_factor: Optional[int] = None
 
-    def _modify_json(self):
-        # Load the JSON data from the file
-        data = load_from_json(self.config.data / "transforms.json")
-
-        # Apply the scale factor
-        for key in ['fl_x', 'fl_y', 'cx', 'cy', 'h', 'w']:
-            if key in data:
-                data[key] *= self.config.latent_scale
-            # save h and w as int
-            if key in ['h', 'w']:
-                data[key] = int(data[key])
-
-        # Modify the file_path in frames
-        for frame in data['frames']:
-            frame['file_path'] = frame['file_path'].replace('images', 'latents')
-
-        # Save the modified data into a new JSON file
-        with open(self.config.data / "latents.json", 'w') as file:
-            json.dump(data, file, indent=4)
-
-    def _generate_latents(self):
-        print("Generating latents...")
-        image_folder = self.config.data / "images"
-        latents_folder = self.config.data / "latents"
-
-        # create latents folder if it doesn't exist
-        if not os.path.exists(latents_folder):
-            os.mkdir(latents_folder)
-
-        # Load the model
-        pipe = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5", torch_dtype=torch.float16)
-        pipe = pipe.to("cuda")
-
-        # torch transform, to tensor and normalize
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-        ])
-
-        # load image names from folder
-        image_names = os.listdir(image_folder)
-
-        for i in range(len(image_names)):
-            # read image
-            print(f"Generating latent {i+1}/{len(image_names)}")
-            image_name = image_names[i]
-            image_path = os.path.join(image_folder, image_name)
-            image = Image.open(image_path)
-
-            image = transform(image).unsqueeze(0).half().to("cuda")
-
-            encoder_out = pipe.vae.encode(image)
-            latents = encoder_out['latent_dist'].mean.detach().cpu().squeeze(0).permute(1, 2, 0).numpy()
-
-            # normalize latents to [0, 1]
-            latents = (latents - latents.min()) / (latents.max() - latents.min())
-
-            # save latents as numpy array
-            latent_path = os.path.join(latents_folder, image_name.replace(".png", ".npy"))
-            np.save(latent_path, latents)
-
-            # save latents as png image
-            latent_image = Image.fromarray((latents * 255).astype(np.uint8))
-            latent_image.save(latent_path.replace(".npy", ".png"))
-
     def _generate_dataparser_outputs(self, split="train"):
         assert self.config.data.exists(), f"Data directory {self.config.data} does not exist."
-
-        # check if latents.json exists
-        if not os.path.exists(self.config.data / "latents.json"):
-            self._modify_json()
-            self._generate_latents()
 
         meta = load_from_json(self.config.data / "latents.json")
         data_dir = self.config.data

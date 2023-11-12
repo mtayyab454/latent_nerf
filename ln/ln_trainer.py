@@ -204,32 +204,5 @@ class LatentNerfTrainer(Trainer):
         if not self.config.viewer.quit_on_train_completion:
             self._train_complete_viewer()
     def save_renderings(self, step: int):
-        """Save renderings of the current model."""
-        os.mkdir(self.base_dir / "renderings" / str(step))
-
-        for current_spot in range(len(self.pipeline.datamanager.train_dataset)):
-
-            print("Rendering image", current_spot)
-            # get original image from dataset
-            # original_image = self.pipeline.datamanager.original_image_batch["image"][current_spot].to(self.device)
-            # generate current index in datamanger
-            current_index = self.pipeline.datamanager.image_batch["image_idx"][current_spot]
-
-            # get current camera, include camera transforms from original optimizer
-            # camera_transforms = self.model.camera_optimizer(current_index.unsqueeze(dim=0))
-            current_camera = self.pipeline.datamanager.train_dataparser_outputs.cameras[current_index].to(self.device)
-            current_ray_bundle = current_camera.generate_rays(torch.tensor(list(range(1))).unsqueeze(-1))
-
-            # get current render of nerf
-            # original_image = original_image.unsqueeze(dim=0).permute(0, 3, 1, 2)
-            camera_outputs = self.pipeline.model.get_outputs_for_camera_ray_bundle(current_ray_bundle)
-            rendered_image = camera_outputs["rgb"].unsqueeze(dim=0).permute(0, 3, 1, 2)
-
-            # save image as png
-            rendered_image = rendered_image[0].cpu().numpy()
-            rendered_image = rendered_image.transpose(1, 2, 0)
-            rendered_image = (rendered_image * 255).astype('uint8')
-            im = Image.fromarray(rendered_image)
-            im.save(self.base_dir / "renderings" / str(step) / f"{current_index}.png")
-
+        self.pipeline.save_renderings(step, self.base_dir)
 
