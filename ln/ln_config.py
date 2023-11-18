@@ -36,6 +36,7 @@ from ln.ln_trainer import LatentNerfTrainerConfig
 ln_method = MethodSpecification(
     config=LatentNerfTrainerConfig(
     method_name="ln",
+    steps_per_rendering= 5000,
     steps_per_eval_batch=500,
     steps_per_save=2000,
     max_num_iterations=30000,
