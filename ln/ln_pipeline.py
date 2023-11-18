@@ -74,10 +74,10 @@ class LatentNerfPipeline(VanillaPipeline):
         super().__init__(config, device, test_mode, world_size, local_rank, grad_scaler)
 
         self.vae = vae
-        # self.refinement_model = RefinementModel(self.config.latent_size).to("cuda")
-        # self.refinement_model.train_refinement(self.datamanager.dataparser.config.data)
+        self.refinement_model = RefinementModel(self.config.latent_size).to("cuda")
+        self.refinement_model.train_refinement(self.datamanager.dataparser.config.data)
 
-    def save_renderings(self, step: int, base_dir):
+    def save_renderings(self, step: int, base_dir, use_decoder=True):
         """Save renderings of the current model."""
         os.mkdir(base_dir / "renderings" / str(step))
 
@@ -97,14 +97,26 @@ class LatentNerfPipeline(VanillaPipeline):
             # get current render of nerf
             # original_image = original_image.unsqueeze(dim=0).permute(0, 3, 1, 2)
             camera_outputs = self.model.get_outputs_for_camera_ray_bundle(current_ray_bundle)
-            rendered_image = camera_outputs["rgb"].unsqueeze(dim=0).permute(0, 3, 1, 2)
+            rendered_latents = camera_outputs["rgb"].unsqueeze(dim=0).permute(0, 3, 1, 2)
 
             # save image as png
-            rendered_image = rendered_image[0].cpu().numpy()
+            rendered_image = rendered_latents[0].cpu().numpy()
             rendered_image = rendered_image.transpose(1, 2, 0)
             rendered_image = (rendered_image * 255).astype('uint8')
             im = Image.fromarray(rendered_image)
             im.save(base_dir / "renderings" / str(step) / f"{current_index}.png")
+
+            if use_decoder:
+                # decode latents
+                refinded_latents = self.refinement_model.refinment_model(rendered_latents)
+                refinded_latents = refinded_latents.half().to("cuda")
+                im = self.vae.decode(refinded_latents).sample
+
+                # normalize im and save as png image
+                im = im.detach().cpu().squeeze(0).permute(1, 2, 0).numpy()
+                im = (im - im.min()) / (im.max() - im.min())
+                im = Image.fromarray((im * 255).astype(np.uint8))
+                im.save(base_dir / "renderings" / str(step) / f"{current_index}_decoded.png")
 
     def _modify_json(self, data_path, latent_scale):
         # Load the JSON data from the file

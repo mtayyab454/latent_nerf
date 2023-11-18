@@ -68,23 +68,22 @@ class RefinementModel(nn.Module):
     def __init__(self, image_size) -> None:
         super().__init__()
 
-        self.refinment_model = torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet',
-                               in_channels=4, out_channels=4, init_features=32, pretrained=False)
+        self.refinment_model = SmallRefinement()
         self.refinment_model = self.refinment_model.half().to("cuda")
 
-    def train_refinement(self, data_folder, training_steps=1000):
+    def train_refinement(self, data_folder, training_steps=1):
         print("Training refinement model")
         self.refinment_model.train()
         latents_folder = data_folder / "latents"
 
-        optimizer = torch.optim.Adam(self.refinment_model.parameters(), lr=0.00001)
+        optimizer = torch.optim.Adam(self.refinment_model.parameters(), lr=0.1)
         criterion = torch.nn.MSELoss()
 
         # torch transform, to tensor and normalize
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)),
-            transforms.Resize((64, 64)),
+            # transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)),
+            # transforms.Resize((64, 64)),
         ])
 
         # list all png images in latents folder
@@ -92,7 +91,8 @@ class RefinementModel(nn.Module):
         image_names = [i for i in file_names if i.endswith(".png")]
         npy_names = [i for i in file_names if i.endswith(".npy")]
 
-        for i in range(training_steps):
+        for j in range(training_steps):
+            loss_vec = []
             for i in range(len(image_names)):
                 # read image
                 # print(f"Generating latent {i + 1}/{len(image_names)}")
@@ -108,7 +108,7 @@ class RefinementModel(nn.Module):
                 latent = torch.from_numpy(latent).unsqueeze(0).permute(0, 3, 1, 2).half().to("cuda")
 
                 # resize latent to 64x64
-                latent = torch.nn.functional.interpolate(latent, size=(64, 64), mode='bilinear')
+                # latent = torch.nn.functional.interpolate(latent, size=(64, 64), mode='bilinear')
 
                 # train refinement model
                 optimizer.zero_grad()
@@ -117,8 +117,23 @@ class RefinementModel(nn.Module):
                 loss.backward()
                 optimizer.step()
 
-                # print loss and train step
-                print(f"Step {i+1}/{training_steps}, loss: {loss.item()}")
+                loss_vec.append(loss.item())
+
+            # print loss and train step
+            print(f"Step {j+1}/{training_steps}, loss: {np.mean(loss_vec)}")
+            # print model parameters
+            print(f"range {self.refinment_model.range.item()}, min: {self.refinment_model.min.item()}")
+
+class SmallRefinement(nn.Module):
+    def __init__(self):
+        super(SmallRefinement, self).__init__()
+        # add parameter mean and std to the model
+        self.register_parameter('range', torch.nn.Parameter(torch.FloatTensor([50])))
+        self.register_parameter('min', torch.nn.Parameter(torch.FloatTensor([-30])))
+    def forward(self, x):
+        # Forward pass through each layer
+        x = x * self.range + self.min
+        return x
 
 class FullyConvNet(nn.Module):
     def __init__(self):
@@ -149,3 +164,23 @@ class FullyConvNet(nn.Module):
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.conv4(x)  # Output layer
         return x
+
+# model = UNet2DModel(
+#     sample_size=(64, 64),  # the target image resolution
+#     in_channels=4,  # the number of input channels, 3 for RGB images
+#     out_channels=4,  # the number of output channels
+#     layers_per_block=2,  # how many ResNet layers to use per UNet block
+#     block_out_channels=(32, 32),  # the number of output channels for each UNet block
+#     down_block_types=(
+#         "DownBlock2D",  # a regular ResNet downsampling block
+#         "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
+#     ),
+#     up_block_types=(
+#         "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
+#         "UpBlock2D",
+#     ),
+# )
+#
+# # number of parameters in the model
+# print(f"Number of parameters in the model: {sum(p.numel() for p in model.parameters())}")
+
