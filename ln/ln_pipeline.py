@@ -74,8 +74,8 @@ class LatentNerfPipeline(VanillaPipeline):
         super().__init__(config, device, test_mode, world_size, local_rank, grad_scaler)
 
         self.vae = vae
-        self.refinement_model = RefinementModel(self.config.latent_size).to("cuda")
-        self.refinement_model.train_refinement(self.datamanager.dataparser.config.data)
+        self.refinement_model = RefinementModel().half().to("cuda")
+        self.refinement_model.train_refinement(self.datamanager.dataparser.config.data, training_steps=1000)
 
     def save_renderings(self, step: int, base_dir, use_decoder=True):
         """Save renderings of the current model."""
@@ -108,7 +108,7 @@ class LatentNerfPipeline(VanillaPipeline):
 
             if use_decoder:
                 # decode latents
-                refinded_latents = self.refinement_model.refinment_model(rendered_latents)
+                refinded_latents = self.refinement_model.refinment_model(rendered_latents.half())
                 refinded_latents = refinded_latents.half().to("cuda")
                 im = self.vae.decode(refinded_latents).sample
 

@@ -66,7 +66,7 @@ class UNet2DConditionOutput:
 
 class RefinementModel(nn.Module):
 
-    def __init__(self, image_size) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
         self.refinment_model = MyAdapter()
@@ -77,13 +77,14 @@ class RefinementModel(nn.Module):
         self.refinment_model.train()
         latents_folder = data_folder / "latents"
 
-        optimizer = torch.optim.Adam(self.refinment_model.parameters(), lr=0.1)
+        # optimizer = torch.optim.Adam(self.refinment_model.parameters(), lr=0.0001)
+        optimizer = torch.optim.SGD(self.refinment_model.parameters(), lr=0.001, momentum=0.9)
         criterion = torch.nn.MSELoss()
 
         # torch transform, to tensor and normalize
         transform = transforms.Compose([
             transforms.ToTensor(),
-            # transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)),
+            transforms.Normalize((0.5, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)),
             # transforms.Resize((64, 64)),
         ])
 
