@@ -1,5 +1,5 @@
 [project]
-name = "ln"
+name = "latent_nerf"
 version = "0.1.0"
 
 dependencies=[

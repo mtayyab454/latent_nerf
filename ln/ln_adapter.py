@@ -22,6 +22,14 @@ class AttnBlock(nn.Module):
         self.proj_out = nn.Conv2d(channels, channels, 1)
         # Attention scaling factor
         self.scale = channels ** -0.5
+        self._init_()
+
+    def _init_(self):
+        # initialize the weights
+        nn.init.xavier_uniform_(self.q.weight)
+        nn.init.xavier_uniform_(self.k.weight)
+        nn.init.xavier_uniform_(self.v.weight)
+        nn.init.xavier_uniform_(self.proj_out.weight)
 
     def forward(self, x: torch.Tensor):
         """
@@ -64,6 +72,13 @@ class MyAdapter(nn.Module):
         self.downconv = nn.Conv2d(4, 16, 3, stride=2, padding=1)
         self.attention = AttnBlock(16)
         self.upconv = nn.ConvTranspose2d(16, 4, 3, stride=2, padding=1, output_padding=1)
+        self._init_()
+
+    def _init_(self):
+        # initialize the weights
+        nn.init.xavier_uniform_(self.downconv.weight)
+        nn.init.xavier_uniform_(self.upconv.weight)
+
     def forward(self, x):
         # Forward pass through each layer
         skip = x
@@ -73,8 +88,8 @@ class MyAdapter(nn.Module):
         x = x + skip
         return x
 
-net = MyAdapter()
-print(net)
-x = torch.randn(1, 4, 64, 40)
-y = net(x)
-print(y.shape)
+# net = MyAdapter()
+# print(net)
+# x = torch.randn(1, 4, 64, 40)
+# y = net(x)
+# print(y.shape)

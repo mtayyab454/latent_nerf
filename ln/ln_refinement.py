@@ -57,6 +57,7 @@ import os
 from PIL import Image
 import torchvision.transforms as transforms
 import numpy as np
+from ln.ln_adapter import MyAdapter
 
 @dataclass
 class UNet2DConditionOutput:
@@ -68,7 +69,7 @@ class RefinementModel(nn.Module):
     def __init__(self, image_size) -> None:
         super().__init__()
 
-        self.refinment_model = SmallRefinement()
+        self.refinment_model = MyAdapter()
         self.refinment_model = self.refinment_model.half().to("cuda")
 
     def train_refinement(self, data_folder, training_steps=1):
@@ -122,7 +123,7 @@ class RefinementModel(nn.Module):
             # print loss and train step
             print(f"Step {j+1}/{training_steps}, loss: {np.mean(loss_vec)}")
             # print model parameters
-            print(f"range {self.refinment_model.range.item()}, min: {self.refinment_model.min.item()}")
+            # print(f"range {self.refinment_model.range.item()}, min: {self.refinment_model.min.item()}")
 
 class SmallRefinement(nn.Module):
     def __init__(self):
@@ -134,52 +135,6 @@ class SmallRefinement(nn.Module):
         # Forward pass through each layer
         x = x * self.range + self.min
         return x
-
-class FullyConvNet(nn.Module):
-    def __init__(self):
-        super(FullyConvNet, self).__init__()
-        # Define convolutional layers
-        # Layer 1 (input layer with 4 channels)
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3, padding=1)
-        self.bn1 = nn.GroupNorm(8, 16)
-        self.relu1 = nn.ReLU()
-
-        # Layer 2
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
-        self.bn2 = nn.GroupNorm(8, 32)
-        self.relu2 = nn.ReLU()
-
-        # Layer 3
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
-        self.bn3 = nn.GroupNorm(8, 64)
-        self.relu3 = nn.ReLU()
-
-        # Output layer (output with 4 channels)
-        self.conv4 = nn.Conv2d(in_channels=64, out_channels=4, kernel_size=1)
-
-    def forward(self, x):
-        # Forward pass through each layer
-        x = self.relu1(self.bn1(self.conv1(x)))
-        x = self.relu2(self.bn2(self.conv2(x)))
-        x = self.relu3(self.bn3(self.conv3(x)))
-        x = self.conv4(x)  # Output layer
-        return x
-
-# model = UNet2DModel(
-#     sample_size=(64, 64),  # the target image resolution
-#     in_channels=4,  # the number of input channels, 3 for RGB images
-#     out_channels=4,  # the number of output channels
-#     layers_per_block=2,  # how many ResNet layers to use per UNet block
-#     block_out_channels=(32, 32),  # the number of output channels for each UNet block
-#     down_block_types=(
-#         "DownBlock2D",  # a regular ResNet downsampling block
-#         "AttnDownBlock2D",  # a ResNet downsampling block with spatial self-attention
-#     ),
-#     up_block_types=(
-#         "AttnUpBlock2D",  # a ResNet upsampling block with spatial self-attention
-#         "UpBlock2D",
-#     ),
-# )
 #
 # # number of parameters in the model
 # print(f"Number of parameters in the model: {sum(p.numel() for p in model.parameters())}")
