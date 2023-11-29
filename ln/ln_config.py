@@ -30,13 +30,13 @@ from nerfstudio.data.dataparsers.nerfstudio_dataparser import NerfstudioDataPars
 from ln.ln_dataparser import LatentNerfDataParserConfig
 from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager, VanillaDataManagerConfig
 from ln.ln_datamanager import LatentNerfDataManagerConfig
-from ln.ln import LatentNerfModelConfig
+from ln.ln_model import LatentNerfModelConfig
 from ln.ln_trainer import LatentNerfTrainerConfig
 
 ln_method = MethodSpecification(
     config=LatentNerfTrainerConfig(
     method_name="latent_nerf",
-    steps_per_rendering= 5000,
+    steps_per_rendering= 2000,
     steps_per_eval_batch=500,
     steps_per_save=2000,
     max_num_iterations=30000,

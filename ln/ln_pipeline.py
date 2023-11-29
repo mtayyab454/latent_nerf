@@ -57,7 +57,7 @@ class LatentNerfPipeline(VanillaPipeline):
 
     def __init__(
         self,
-        config: VanillaPipelineConfig,
+        config: LatentNerfPipelineConfig,
         device: str,
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
@@ -70,32 +70,42 @@ class LatentNerfPipeline(VanillaPipeline):
         if not os.path.exists(config.datamanager.data / "latents.json"):
             self._modify_json(config.datamanager.data, config.latent_scale)
             self._generate_latents(config.datamanager.data, vae)
+        else:
+            # load min and max
+            with open(config.datamanager.data / "latents" / "min_max.txt", 'r') as file:
+                self.latent_min = float(file.readline())
+                self.latent_max = float(file.readline())
 
         super().__init__(config, device, test_mode, world_size, local_rank, grad_scaler)
 
         self.vae = vae
-        self.refinement_model = RefinementModel().half().to("cuda")
-        self.refinement_model.train_refinement(self.datamanager.dataparser.config.data, training_steps=1000)
 
     def save_renderings(self, step: int, base_dir, use_decoder=True):
         """Save renderings of the current model."""
         os.mkdir(base_dir / "renderings" / str(step))
 
-        for current_spot in range(len(self.datamanager.train_dataset)):
+        for i in range(len(self.datamanager.train_dataset.image_filenames)):
 
-            print("Rendering image", current_spot)
-            # get original image from dataset
-            # original_image = self.pipeline.datamanager.original_image_batch["image"][current_spot].to(self.device)
-            # generate current index in datamanger
-            current_index = self.datamanager.image_batch["image_idx"][current_spot]
+            print("Rendering image", i)
+            current_index = self.datamanager.image_batch["image_idx"][i]
+            current_fname = self.datamanager.train_dataset.image_filenames[current_index].name
 
-            # get current camera, include camera transforms from original optimizer
-            # camera_transforms = self.model.camera_optimizer(current_index.unsqueeze(dim=0))
+            # ############################################################################################################
+            # im = self.datamanager.image_batch['image'][i].numpy()
+            # # load latent
+            # latent_path = 'data/nerfstudio/fangzhou-small/latents/' + current_fname.replace(".png", ".npy")
+            # latents = np.load(latent_path)
+            # # normalize latents
+            # latents = (latents + 57.40625) / (44.5625 + 57.40625)
+            #
+            # diff = np.abs(im - latents)
+            # print("diff", diff.max())
+            #
+            # ############################################################################################################
+
             current_camera = self.datamanager.train_dataparser_outputs.cameras[current_index].to(self.device)
             current_ray_bundle = current_camera.generate_rays(torch.tensor(list(range(1))).unsqueeze(-1))
 
-            # get current render of nerf
-            # original_image = original_image.unsqueeze(dim=0).permute(0, 3, 1, 2)
             camera_outputs = self.model.get_outputs_for_camera_ray_bundle(current_ray_bundle)
             rendered_latents = camera_outputs["rgb"].unsqueeze(dim=0).permute(0, 3, 1, 2)
 
@@ -104,19 +114,24 @@ class LatentNerfPipeline(VanillaPipeline):
             rendered_image = rendered_image.transpose(1, 2, 0)
             rendered_image = (rendered_image * 255).astype('uint8')
             im = Image.fromarray(rendered_image)
-            im.save(base_dir / "renderings" / str(step) / f"{current_index}.png")
+            im.save(base_dir / "renderings" / str(step) / current_fname)
 
             if use_decoder:
                 # decode latents
-                refinded_latents = self.refinement_model.refinment_model(rendered_latents.half())
-                refinded_latents = refinded_latents.half().to("cuda")
-                im = self.vae.decode(refinded_latents).sample
+                # refinded_latents = self.refinement_model.refinment_model(rendered_latents.half())
+                # refinded_latents = refinded_latents.half().to("cuda")
+
+                # normalize latents
+                # rendered_latents = self.datamanager.image_batch['image'][i].permute(2, 0, 1).unsqueeze(0).to("cuda").half()
+                rendered_latents = rendered_latents * (self.latent_max - self.latent_min) + self.latent_min
+
+                im = self.vae.decode(rendered_latents.half()).sample
 
                 # normalize im and save as png image
                 im = im.detach().cpu().squeeze(0).permute(1, 2, 0).numpy()
                 im = (im - im.min()) / (im.max() - im.min())
                 im = Image.fromarray((im * 255).astype(np.uint8))
-                im.save(base_dir / "renderings" / str(step) / f"{current_index}_decoded.png")
+                im.save(base_dir / "renderings" / str(step) / current_fname.replace(".png", "_decoded.png") )
 
     def _modify_json(self, data_path, latent_scale):
         # Load the JSON data from the file
@@ -156,6 +171,9 @@ class LatentNerfPipeline(VanillaPipeline):
         # load image names from folder
         image_names = os.listdir(image_folder)
 
+        latent_min = float("inf")
+        latent_max = float("-inf")
+
         for i in range(len(image_names)):
             # read image
             print(f"Generating latent {i+1}/{len(image_names)}")
@@ -172,12 +190,29 @@ class LatentNerfPipeline(VanillaPipeline):
             latent_path = os.path.join(latents_folder, image_name.replace(".png", ".npy"))
             np.save(latent_path, latents)
 
-            # normalize latents to [0, 1]
-            latents = (latents - latents.min()) / (latents.max() - latents.min())
+            # update min and max
+            latent_min = min(latent_min, latents.min())
+            latent_max = max(latent_max, latents.max())
+
+        for i in range(len(image_names)):
+            image_name = image_names[i]
+            latent_path = os.path.join(latents_folder, image_name.replace(".png", ".npy"))
+            latents = np.load(latent_path)
+
+            # normalize latents
+            latents = (latents - latent_min) / (latent_max - latent_min)
 
             # save latents as png image
-            latent_image = Image.fromarray((latents * 255).astype(np.uint8))
-            latent_image.save(latent_path.replace(".npy", ".png"))
+            latent_path = os.path.join(latents_folder, image_name.replace(".png", ".png"))
+            im = Image.fromarray((latents * 255).astype(np.uint8))
+            im.save(latent_path, alpha=True)
+
+        # save min and max
+        with open(latents_folder / "min_max.txt", 'w') as file:
+            file.write(f"{latent_min}\n{latent_max}")
+
+        self.latent_min = latent_min
+        self.latent_max = latent_max
 
     def forward(self):
         """Not implemented since we only want the parameter saving of the nn module, but not forward()"""

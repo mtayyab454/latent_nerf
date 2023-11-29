@@ -97,6 +97,8 @@ class LatentNerfTrainer(Trainer):
         training_state: Current model training state.
     """
 
+    config: LatentNerfTrainerConfig
+
     def __init__(self, config: TrainerConfig, local_rank: int = 0, world_size: int = 1) -> None:
         super().__init__(config, local_rank, world_size)
 
@@ -173,8 +175,8 @@ class LatentNerfTrainer(Trainer):
                 if step_check(step, self.config.steps_per_save):
                     self.save_checkpoint(step)
 
-                if step % self.config.steps_per_rendering == 0:
-                    self.save_renderings(step)
+                if step_check(step, self.config.steps_per_rendering):
+                    self.pipeline.save_renderings(step, self.base_dir, use_decoder=True)
 
                 writer.write_out_storage()
 
@@ -182,7 +184,9 @@ class LatentNerfTrainer(Trainer):
         self.save_checkpoint(step)
 
         # save renderings at the end of training
-        self.save_renderings(step)
+        self.pipeline.save_renderings(step, self.base_dir, use_decoder=True)
+        self.pipeline.refinement_model.train_refinement(self.config.pipeline.datamanager.data / "latents", self.base_dir / "renderings" / str(step), training_steps=1000)
+        self.pipeline.save_renderings(step+1, self.base_dir, use_decoder=True)
 
         # write out any remaining events (e.g., total train time)
         writer.write_out_storage()
@@ -203,6 +207,4 @@ class LatentNerfTrainer(Trainer):
 
         if not self.config.viewer.quit_on_train_completion:
             self._train_complete_viewer()
-    def save_renderings(self, step: int):
-        self.pipeline.save_renderings(step, self.base_dir)
 

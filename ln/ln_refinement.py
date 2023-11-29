@@ -72,10 +72,10 @@ class RefinementModel(nn.Module):
         self.refinment_model = MyAdapter()
         self.refinment_model = self.refinment_model.half().to("cuda")
 
-    def train_refinement(self, data_folder, training_steps=1):
+    def train_refinement(self, gt_latents_folder, target_latents_folder, training_steps=1):
         print("Training refinement model")
         self.refinment_model.train()
-        latents_folder = data_folder / "latents"
+        # latents_folder = data_folder / "latents"
 
         # optimizer = torch.optim.Adam(self.refinment_model.parameters(), lr=0.0001)
         optimizer = torch.optim.SGD(self.refinment_model.parameters(), lr=0.001, momentum=0.9)
@@ -89,9 +89,10 @@ class RefinementModel(nn.Module):
         ])
 
         # list all png images in latents folder
-        file_names = os.listdir(latents_folder)
-        image_names = [i for i in file_names if i.endswith(".png")]
-        npy_names = [i for i in file_names if i.endswith(".npy")]
+        file_names = os.listdir(target_latents_folder)
+        image_names = [i for i in file_names if i.endswith(".png") and not i.endswith("_decoded.png")]
+        # create list of npy names from image names by replacing png with npy
+        npy_names = [i.replace(".png", ".npy") for i in image_names]
 
         for j in range(training_steps):
             loss_vec = []
@@ -99,13 +100,13 @@ class RefinementModel(nn.Module):
                 # read image
                 # print(f"Generating latent {i + 1}/{len(image_names)}")
                 image_name = image_names[i]
-                image_path = os.path.join(latents_folder, image_name)
+                image_path = os.path.join(target_latents_folder, image_name)
                 image = Image.open(image_path)
                 image = transform(image).unsqueeze(0).half().to("cuda")
 
                 # read latent
                 latent_name = npy_names[i]
-                latent_path = os.path.join(latents_folder, latent_name)
+                latent_path = os.path.join(gt_latents_folder, latent_name)
                 latent = np.load(latent_path)
                 latent = torch.from_numpy(latent).unsqueeze(0).permute(0, 3, 1, 2).half().to("cuda")
 
@@ -125,17 +126,6 @@ class RefinementModel(nn.Module):
             print(f"Step {j+1}/{training_steps}, loss: {np.mean(loss_vec)}")
             # print model parameters
             # print(f"range {self.refinment_model.range.item()}, min: {self.refinment_model.min.item()}")
-
-class SmallRefinement(nn.Module):
-    def __init__(self):
-        super(SmallRefinement, self).__init__()
-        # add parameter mean and std to the model
-        self.register_parameter('range', torch.nn.Parameter(torch.FloatTensor([50])))
-        self.register_parameter('min', torch.nn.Parameter(torch.FloatTensor([-30])))
-    def forward(self, x):
-        # Forward pass through each layer
-        x = x * self.range + self.min
-        return x
 #
 # # number of parameters in the model
 # print(f"Number of parameters in the model: {sum(p.numel() for p in model.parameters())}")

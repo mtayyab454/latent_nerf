@@ -69,9 +69,10 @@ class MyAdapter(nn.Module):
     def __init__(self):
         super().__init__()
         # downsampling convolution
-        self.downconv = nn.Conv2d(4, 16, 3, stride=2, padding=1)
-        self.attention = AttnBlock(16)
-        self.upconv = nn.ConvTranspose2d(16, 4, 3, stride=2, padding=1, output_padding=1)
+        # self.range_min = SmallRefinement()
+        self.downconv = nn.Conv2d(4, 128, 3, stride=2, padding=1)
+        self.attention = AttnBlock(128)
+        self.upconv = nn.ConvTranspose2d(128, 4, 3, stride=2, padding=1, output_padding=1)
         self._init_()
 
     def _init_(self):
@@ -81,6 +82,8 @@ class MyAdapter(nn.Module):
 
     def forward(self, x):
         # Forward pass through each layer
+        # x = self.range_min(x)
+        x = x * 50 -30
         skip = x
         x = self.downconv(x)
         x = self.attention(x)
@@ -88,8 +91,17 @@ class MyAdapter(nn.Module):
         x = x + skip
         return x
 
+class SmallRefinement(nn.Module):
+    def __init__(self):
+        super(SmallRefinement, self).__init__()
+        # add parameter mean and std to the model
+        self.register_parameter('range', torch.nn.Parameter(torch.FloatTensor([50])))
+        self.register_parameter('min', torch.nn.Parameter(torch.FloatTensor([-30])))
+    def forward(self, x):
+        # Forward pass through each layer
+        x = x * self.range + self.min
+        return x
+
 # net = MyAdapter()
-# print(net)
-# x = torch.randn(1, 4, 64, 40)
-# y = net(x)
-# print(y.shape)
+# print number of parameters
+# print("Number of parameters:", sum(p.numel() for p in net.parameters()))

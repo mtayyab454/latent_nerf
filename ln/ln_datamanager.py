@@ -72,9 +72,9 @@ class LatentNerfDataManager(VanillaDataManager):
         self.image_batch = next(self.iter_train_image_dataloader)
 
         # keep a copy of the original image batch
-        self.original_image_batch = {}
-        self.original_image_batch['image'] = self.image_batch['image'].clone()
-        self.original_image_batch['image_idx'] = self.image_batch['image_idx'].clone()
+        # self.original_image_batch = {}
+        # self.original_image_batch['image'] = self.image_batch['image'].clone()
+        # self.original_image_batch['image_idx'] = self.image_batch['image_idx'].clone()
 
     def next_train(self, step: int) -> Tuple[RayBundle, Dict]:
         """Returns the next batch of data from the train dataloader."""
